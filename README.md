@@ -10,7 +10,7 @@ One tap-to-switch picture compare, as a single dependency-free web component.
 - With a picture missing it takes them by drop, paste or a file pick.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/TypeFunDiabetes/tap-compare@1.0.0/tap-compare.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/TypeFunDiabetes/tap-compare@1.0.1/tap-compare.js"></script>
 <tap-compare a="first.png" b="second.png" a-label="Before" b-label="After"></tap-compare>
 ```
 
@@ -27,4 +27,4 @@ Attribute `shown="a" | "b"` sets the picture at rest.
 Look, through CSS custom properties on the element or a parent: `--tc-accent`, `--tc-dot`, `--tc-dot-off`,
 `--tc-radius`, `--tc-blend`, `--tc-max-height`, `--tc-gap`, `--tc-muted`, `--tc-font`.
 
-Always load a pinned version (`@1.0.0`), never a branch: a tag here is never moved.
+Always load a pinned version (`@1.0.1`), never a branch: a tag here is never moved.

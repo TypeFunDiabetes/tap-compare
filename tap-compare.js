@@ -12,17 +12,17 @@
    --tc-dot, --tc-dot-off, --tc-radius, --tc-blend, --tc-max-height, --tc-gap, --tc-muted, --tc-font. */
 (() => {
   "use strict";
-  const VERSION = "1.0.0";
+  const VERSION = "1.0.1";
   if (window.customElements.get("tap-compare")) return;
   const HOLD_MS = 250;      // shorter is a tap (flip), longer a peek; Train's Hold and ChatGPT's review agree on it
   const DRAG_PX = 6;        // movement that turns a press into a detail box
   const CSS = `
 :host{display:block;position:relative;font:var(--tc-font,inherit);color:inherit;-webkit-user-select:none;user-select:none}
 :host([hidden]){display:none}
-.frame{position:relative;border-radius:var(--tc-radius,8px);overflow:hidden;cursor:pointer;outline:none;
+.frame{position:relative;margin:0 auto;border-radius:var(--tc-radius,8px);overflow:hidden;cursor:pointer;outline:none;
   touch-action:manipulation;-webkit-touch-callout:none;line-height:0}
 :host([detail]) .frame{touch-action:none;cursor:crosshair}
-.frame:focus-visible{box-shadow:0 0 0 2px var(--tc-accent,#3a6df0)}
+.frame.kbd:focus{box-shadow:0 0 0 2px var(--tc-accent,#3a6df0)}
 .frame.peek{box-shadow:inset 0 0 0 2px var(--tc-accent,#3a6df0)}
 .pic{display:block;width:100%;height:auto;max-height:var(--tc-max-height,80vh);object-fit:contain;
   transition:opacity var(--tc-blend,90ms) linear;-webkit-user-drag:none;pointer-events:none}
@@ -106,7 +106,7 @@
         this._failed[name] = false;
         const img = this._el[name];
         if (val) img.src = val; else img.removeAttribute("src");
-        if (name === "a") this._rect = null;
+        if (name === "a") { this._rect = null; this._fit(); }
       } else if (name === "shown" && (val === "a" || val === "b") && val !== this._shown) {
         this._shown = this._visible = val;
       }
@@ -164,15 +164,19 @@
       const el = this._el;
       for (const w of ["a", "b"]) {
         el[w].addEventListener("error", () => { if (this.getAttribute(w)) { this._failed[w] = true; this._render(); } });
-        el[w].addEventListener("load", () => { this._failed[w] = false; this._render(); });
+        el[w].addEventListener("load", () => { this._failed[w] = false; this._fit(); this._render(); });
       }
       const f = el.frame;
+      // the focus ring is for the keyboard only: a tap focuses the frame (for C) without drawing it
+      f.addEventListener("focus", () => { if (!this._g) f.classList.add("kbd"); });
+      f.addEventListener("blur", () => f.classList.remove("kbd"));
       f.addEventListener("contextmenu", (e) => e.preventDefault());
       f.addEventListener("pointerdown", (e) => {
         if (e.button !== 0 || this._g || !this._ready()) return;
         e.preventDefault();
-        f.focus({ preventScroll: true });
         const g = this._g = { id: e.pointerId, x: e.clientX, y: e.clientY, drag: false, peek: false };
+        f.classList.remove("kbd");
+        f.focus({ preventScroll: true });
         try { f.setPointerCapture(e.pointerId); } catch (_) { /* a synthetic press */ }
         g.timer = setTimeout(() => {
           if (this._g !== g || g.drag) return;
@@ -253,6 +257,13 @@
         this._el[w].src = src;
       }
       this._render();
+    }
+
+    // the frame as wide as the first picture is drawn: a picture capped by --tc-max-height leaves no bars beside it
+    _fit() {
+      const img = this._el.a;
+      if (!img.naturalWidth || !img.naturalHeight) { this._el.frame.style.width = ""; return; }
+      this._el.frame.style.width = `min(100%, calc(var(--tc-max-height, 80vh) * ${img.naturalWidth / img.naturalHeight}))`;
     }
 
     // the picture's drawn area inside the frame (object-fit: contain leaves bars when the frame is capped)
