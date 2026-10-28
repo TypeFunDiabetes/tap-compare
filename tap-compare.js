@@ -8,11 +8,13 @@
    under it light the picture shown. "detail" adds a drag-a-box close look: the box's crop of both pictures side by
    side under it (the centre to start). With a picture missing it takes them by drop, paste or a file pick.
    Events (bubbling): tc-change {shown, how}, tc-peek {peeking, visible}, tc-detail {x, y, w, h} (fractions),
-   tc-pictures {a, b}. Methods: flip(), show("a"|"b"), setPictures(a, b). Look: CSS custom properties --tc-accent,
+   tc-pictures {a, b}. Attribute detail-box="x y w h" (fractions) holds the box: a drag writes it, a page sets it to
+   restore one. Methods: flip(), show("a"|"b"), setPictures(a, b), setDetail({x, y, w, h} | null).
+   Look: CSS custom properties --tc-accent,
    --tc-dot, --tc-dot-off, --tc-radius, --tc-blend, --tc-max-height, --tc-gap, --tc-muted, --tc-font. */
 (() => {
   "use strict";
-  const VERSION = "1.0.1";
+  const VERSION = "1.1.0";
   if (window.customElements.get("tap-compare")) return;
   const HOLD_MS = 250;      // shorter is a tap (flip), longer a peek; Train's Hold and ChatGPT's review agree on it
   const DRAG_PX = 6;        // movement that turns a press into a detail box
@@ -53,7 +55,7 @@
   };
 
   class TapCompare extends HTMLElement {
-    static get observedAttributes() { return ["a", "b", "a-label", "b-label", "detail", "shown"]; }
+    static get observedAttributes() { return ["a", "b", "a-label", "b-label", "detail", "shown", "detail-box"]; }
 
     constructor() {
       super();
@@ -106,7 +108,9 @@
         this._failed[name] = false;
         const img = this._el[name];
         if (val) img.src = val; else img.removeAttribute("src");
-        if (name === "a") { this._rect = null; this._fit(); }
+        if (name === "a") { this._rect = this._parseBox(this.getAttribute("detail-box")); this._fit(); }
+      } else if (name === "detail-box") {
+        this._rect = this._parseBox(val);
       } else if (name === "shown" && (val === "a" || val === "b") && val !== this._shown) {
         this._shown = this._visible = val;
       }
@@ -125,12 +129,29 @@
       if (changed) this._emit("tc-change", { shown: which, how });
     }
 
+    // restore a saved box (fractions of the picture), or null for the centre box; emits nothing
+    setDetail(r) {
+      if (r && [r.x, r.y, r.w, r.h].every((v) => typeof v === "number" && isFinite(v))) {
+        this.setAttribute("detail-box", [r.x, r.y, r.w, r.h].map((v) => +v.toFixed(4)).join(" "));
+      } else this.removeAttribute("detail-box");
+    }
+
+    get detailBox() { return this._rect ? { ...this._rect } : null; }
+
     setPictures(a, b) {
       if (a != null) this.setAttribute("a", a); else this.removeAttribute("a");
       if (b != null) this.setAttribute("b", b); else this.removeAttribute("b");
     }
 
     /* ---- inside ---- */
+    _parseBox(val) {
+      const n = String(val || "").split(/[\s,]+/).filter(Boolean).map(Number);
+      if (n.length !== 4 || !n.every(isFinite)) return null;
+      const cl = (v) => Math.max(0, Math.min(1, v));
+      const x = cl(n[0]), y = cl(n[1]), w = Math.min(cl(n[2]), 1 - x), h = Math.min(cl(n[3]), 1 - y);
+      return w > 0 && h > 0 ? { x, y, w, h } : null;
+    }
+
     _ready() { return !!(this.getAttribute("a") && this.getAttribute("b")); }
     _label(w) { return this.getAttribute(w + "-label") || w.toUpperCase(); }
     _emit(type, detail) { this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true })); }
@@ -208,7 +229,7 @@
           this._emit("tc-peek", { peeking: false, visible: this._visible });
         } else if (g.drag && e.type === "pointerup") {
           const r = this._box(g.x, g.y, e.clientX, e.clientY);
-          if (r && r.w > 0.025 && r.h > 0.025) { this._rect = r; this._emit("tc-detail", { ...r }); }
+          if (r && r.w > 0.025 && r.h > 0.025) { this.setDetail(r); this._emit("tc-detail", { ...this._rect }); }
           this._render();
         } else if (e.type === "pointerup") {
           if (this._failed.a || this._failed.b) this._retry(); else this.flip("tap");
