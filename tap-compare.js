@@ -5,16 +5,17 @@
    <tap-compare a="first.png" b="second.png" a-label="Krea" b-label="Qwen"></tap-compare>
    A tap (or click) flips and the picture stays; a press held past HOLD_MS shows the other one until let go (a peek);
    C, Enter or Space flips while it has focus (keys="page": C anywhere on the page outside a text field). Two dots
-   under it light the picture shown. "detail" adds a drag-a-box close look: the box's crop of both pictures side by
-   side under it (the centre to start). With a picture missing it takes them by drop, paste or a file pick.
+   under it light the picture shown. "detail" adds a Select detail mode: switching is locked while drawing the
+   box, with both crops below (the centre to start). "controls" adds a visible Show A/B button without crops.
+   With a picture missing it takes them by drop, paste or a file pick.
    Events (bubbling): tc-change {shown, how}, tc-peek {peeking, visible}, tc-detail {x, y, w, h} (fractions),
-   tc-pictures {a, b}. Attribute detail-box="x y w h" (fractions) holds the box: a drag writes it, a page sets it to
-   restore one. Methods: flip(), show("a"|"b"), setPictures(a, b), setDetail({x, y, w, h} | null).
+   tc-pictures {a, b}, tc-mode {mode: "compare"|"detail"}. Attribute detail-box="x y w h" holds the crop.
+   Methods: flip(), show("a"|"b"), setPictures(a, b), setDetail({x, y, w, h} | null).
    Look: CSS custom properties --tc-accent,
    --tc-dot, --tc-dot-off, --tc-radius, --tc-blend, --tc-max-height, --tc-gap, --tc-muted, --tc-font. */
 (() => {
   "use strict";
-  const VERSION = "1.1.0";
+  const VERSION = "1.2.0";
   if (window.customElements.get("tap-compare")) return;
   const HOLD_MS = 250;      // shorter is a tap (flip), longer a peek; Train's Hold and ChatGPT's review agree on it
   const DRAG_PX = 6;        // movement that turns a press into a detail box
@@ -23,7 +24,11 @@
 :host([hidden]){display:none}
 .frame{position:relative;margin:0 auto;border-radius:var(--tc-radius,8px);overflow:hidden;cursor:pointer;outline:none;
   touch-action:manipulation;-webkit-touch-callout:none;line-height:0}
-:host([detail]) .frame{touch-action:none;cursor:crosshair}
+:host([detail][mode="detail"]) .frame{touch-action:none;cursor:crosshair}
+.controls{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px}
+.actions{display:flex;gap:8px}.controls button{font:inherit;color:inherit;background:transparent;border:1px solid var(--tc-muted,#8a8f98);border-radius:var(--tc-radius,8px);padding:8px 12px;cursor:pointer}
+.controls .switch{background:var(--tc-accent,#bce0d6);color:#14231f;font-weight:600}.controls button:disabled{opacity:.45;cursor:default}
+.hint{font-size:13px;line-height:1.4;color:var(--tc-muted,#8a8f98);margin:0 0 10px}
 .frame.kbd:focus{box-shadow:0 0 0 2px var(--tc-accent,#3a6df0)}
 .frame.peek{box-shadow:inset 0 0 0 2px var(--tc-accent,#3a6df0)}
 .pic{display:block;width:100%;height:auto;max-height:var(--tc-max-height,80vh);object-fit:contain;
@@ -39,6 +44,7 @@
 .dots span.on{background:var(--tc-dot,currentColor)}
 .crops{display:grid;grid-template-columns:1fr 1fr;gap:var(--tc-gap,8px);margin-top:var(--tc-gap,8px)}
 .crops canvas{width:100%;height:auto;border-radius:var(--tc-radius,8px);display:block}
+.crops figure{margin:0;min-width:0}.crops figcaption{font-size:13px;line-height:1.4;color:var(--tc-muted,#8a8f98);margin-top:6px;overflow-wrap:anywhere}
 .drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:120px;padding:16px;
   border:1.5px dashed var(--tc-dot-off,rgba(128,128,128,.5));border-radius:var(--tc-radius,8px);text-align:center;
   font-size:13px;line-height:1.4;color:var(--tc-muted,#8a8f98);cursor:pointer;margin-top:var(--tc-gap,8px)}
@@ -55,21 +61,22 @@
   };
 
   class TapCompare extends HTMLElement {
-    static get observedAttributes() { return ["a", "b", "a-label", "b-label", "detail", "shown", "detail-box"]; }
+    static get observedAttributes() { return ["a", "b", "a-label", "b-label", "detail", "shown", "detail-box", "mode", "controls"]; }
 
     constructor() {
       super();
       const root = this.attachShadow({ mode: "open" });
       root.innerHTML = `<style>${CSS}</style>
+<div class="controls" part="controls" hidden><span class="current"></span><div class="actions"><button type="button" class="select" aria-pressed="false">Select detail</button><button type="button" class="switch">Show B</button></div></div><p class="hint" hidden></p>
 <div class="frame" part="frame" tabindex="0" role="button"><img class="pic a" alt="" draggable="false"><img class="pic b off" alt="" draggable="false"><div class="sel" hidden></div><div class="msg" hidden></div></div>
 <div class="dots" part="dots" aria-hidden="true"><span class="on"></span><span></span></div>
-<div class="crops" part="crops" hidden><canvas class="ca"></canvas><canvas class="cb"></canvas></div>
+<div class="crops" part="crops" hidden><figure><canvas class="ca"></canvas><figcaption class="label-a"></figcaption></figure><figure><canvas class="cb"></canvas><figcaption class="label-b"></figcaption></figure></div>
 <label class="drop" part="drop" hidden><span class="plus" aria-hidden="true">+</span><span class="dtext"></span><input type="file" accept="image/*" multiple></label>
 <div class="sr" aria-live="polite"></div>`;
       const $ = (s) => root.querySelector(s);
       this._el = { frame: $(".frame"), a: $(".pic.a"), b: $(".pic.b"), sel: $(".sel"), msg: $(".msg"),
         dots: root.querySelectorAll(".dots span"), crops: $(".crops"), ca: $(".ca"), cb: $(".cb"), drop: $(".drop"),
-        dtext: $(".dtext"), file: $("input"), live: $(".sr") };
+        dtext: $(".dtext"), file: $("input"), live: $(".sr"), controls: $(".controls"), select: $(".select"), switch: $(".switch"), current: $(".current"), hint: $(".hint"), labelA: $(".label-a"), labelB: $(".label-b") };
       this._shown = "a";       // the picture at rest
       this._visible = "a";     // the picture on screen (the other one during a peek)
       this._failed = { a: false, b: false };
@@ -94,16 +101,22 @@
       };
       document.addEventListener("keydown", this._docKey);
       document.addEventListener("paste", this._docPaste);
+      this._windowBlur = () => this._cancelGesture();
+      window.addEventListener("blur", this._windowBlur);
       this._render();
     }
 
     disconnectedCallback() {
+      this._cancelGesture();
       document.removeEventListener("keydown", this._docKey);
       document.removeEventListener("paste", this._docPaste);
+      window.removeEventListener("blur", this._windowBlur);
     }
 
     attributeChangedCallback(name, old, val) {
       if (old === val) return;
+      if (name === "mode") this._cancelGesture(true);
+      if (name === "detail" && val === null) this._cancelGesture();
       if (name === "a" || name === "b") {
         this._failed[name] = false;
         const img = this._el[name];
@@ -118,9 +131,10 @@
     }
 
     /* ---- what the page calls ---- */
-    flip(how = "api") { this.show(this._shown === "a" ? "b" : "a", how); }
+    flip(how = "api") { if (!this._detailMode()) this.show(this._shown === "a" ? "b" : "a", how); }
 
     show(which, how = "api") {
+      if (this._detailMode()) return;
       if (which !== "a" && which !== "b") return;
       const changed = which !== this._shown;
       this._shown = this._visible = which;
@@ -153,11 +167,39 @@
     }
 
     _ready() { return !!(this.getAttribute("a") && this.getAttribute("b")); }
+    _detailMode() { return this.hasAttribute("detail") && this.getAttribute("mode") === "detail"; }
+    _cancelGesture(pin = false) {
+      if (this._g) clearTimeout(this._g.timer);
+      this._g = null;
+      const peeked = this._visible !== this._shown;
+      if (pin && peeked) {
+        this._shown = this._visible;
+        this.setAttribute("shown", this._shown);
+        this._emit("tc-change", { shown: this._shown, how: "mode" });
+      }
+      this._visible = this._shown;
+      this._el.frame.classList.remove("peek");
+      if (peeked) this._emit("tc-peek", { peeking: false, visible: this._visible });
+      this._render();
+    }
     _label(w) { return this.getAttribute(w + "-label") || w.toUpperCase(); }
     _emit(type, detail) { this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true })); }
 
     _render() {
       const el = this._el, a = this.getAttribute("a"), b = this.getAttribute("b"), ready = !!(a && b);
+      const selecting = this._detailMode();
+      el.controls.hidden = !ready || !(this.hasAttribute("controls") || this.hasAttribute("detail"));
+      el.current.textContent = `Showing ${this._visible.toUpperCase()}`;
+      el.current.title = this._label(this._visible);
+      el.labelA.textContent = `A · ${this._label("a")}`;
+      el.labelB.textContent = `B · ${this._label("b")}`;
+      el.switch.textContent = `Show ${this._visible === "a" ? "B" : "A"}`;
+      el.switch.disabled = selecting;
+      el.select.hidden = !this.hasAttribute("detail");
+      el.select.textContent = selecting ? "Compare images" : "Select detail";
+      el.select.setAttribute("aria-pressed", String(selecting));
+      el.hint.hidden = !ready || !this.hasAttribute("detail");
+      el.hint.textContent = selecting ? "Image locked. Drag a box to compare that detail in both images." : "Click to switch; hold to peek. Select detail to draw a box without switching.";
       el.frame.hidden = !a && !b;
       el.dots[0].parentNode.hidden = !ready;
       el.b.hidden = !b;
@@ -166,8 +208,9 @@
       el.dots[0].classList.toggle("on", this._visible === "a");
       el.dots[1].classList.toggle("on", this._visible === "b");
       el.frame.setAttribute("aria-label", ready
-        ? `${this._label(this._visible)} shown. Tap to switch, hold to peek` + (this.hasAttribute("detail") ? ", drag to compare a detail" : "")
+        ? (selecting ? `${this._label(this._visible)} locked. Drag to select a detail.` : `${this._label(this._visible)} shown. Tap to switch, hold to peek`)
         : "Picture");
+      el.frame.setAttribute("role", selecting ? "group" : "button");
       el.live.textContent = ready ? `${this._label(this._visible)} shown` : "";
       const bad = this._failed.a ? "a" : this._failed.b ? "b" : null;
       el.msg.hidden = !bad;
@@ -183,6 +226,11 @@
 
     _bind() {
       const el = this._el;
+      el.switch.addEventListener("click", () => this.flip("button"));
+      el.select.addEventListener("click", () => {
+        this.setAttribute("mode", this._detailMode() ? "compare" : "detail");
+        this._emit("tc-mode", { mode: this._detailMode() ? "detail" : "compare" });
+      });
       for (const w of ["a", "b"]) {
         el[w].addEventListener("error", () => { if (this.getAttribute(w)) { this._failed[w] = true; this._render(); } });
         el[w].addEventListener("load", () => { this._failed[w] = false; this._fit(); this._render(); });
@@ -190,7 +238,7 @@
       const f = el.frame;
       // the focus ring is for the keyboard only: a tap focuses the frame (for C) without drawing it
       f.addEventListener("focus", () => { if (!this._g) f.classList.add("kbd"); });
-      f.addEventListener("blur", () => f.classList.remove("kbd"));
+      f.addEventListener("blur", () => { f.classList.remove("kbd"); if (this._g) this._cancelGesture(); });
       f.addEventListener("contextmenu", (e) => e.preventDefault());
       f.addEventListener("pointerdown", (e) => {
         if (e.button !== 0 || this._g || !this._ready()) return;
@@ -199,6 +247,7 @@
         f.classList.remove("kbd");
         f.focus({ preventScroll: true });
         try { f.setPointerCapture(e.pointerId); } catch (_) { /* a synthetic press */ }
+        if (this._detailMode()) return;
         g.timer = setTimeout(() => {
           if (this._g !== g || g.drag) return;
           g.peek = true;
@@ -210,7 +259,7 @@
       });
       f.addEventListener("pointermove", (e) => {
         const g = this._g;
-        if (!g || e.pointerId !== g.id || !this.hasAttribute("detail")) return;
+        if (!g || e.pointerId !== g.id || !this._detailMode()) return;
         if (!g.drag && Math.hypot(e.clientX - g.x, e.clientY - g.y) > DRAG_PX && !g.peek) {
           g.drag = true;
           clearTimeout(g.timer);
@@ -227,13 +276,14 @@
           f.classList.remove("peek");
           this._render();
           this._emit("tc-peek", { peeking: false, visible: this._visible });
-        } else if (g.drag && e.type === "pointerup") {
+        } else if (g.drag && this._detailMode() && e.type === "pointerup") {
           const r = this._box(g.x, g.y, e.clientX, e.clientY);
           if (r && r.w > 0.025 && r.h > 0.025) { this.setDetail(r); this._emit("tc-detail", { ...this._rect }); }
           this._render();
-        } else if (e.type === "pointerup") {
+        } else if (e.type === "pointerup" && !this._detailMode()) {
           if (this._failed.a || this._failed.b) this._retry(); else this.flip("tap");
         }
+        if (e.type !== "pointerup") this._render();
       };
       f.addEventListener("pointerup", end);
       f.addEventListener("pointercancel", end);
