@@ -14,9 +14,14 @@ One tap-to-switch picture compare, as a single dependency-free web component.
 - A viewer with neither `detail` nor `controls` keeps the plain picture, dots, tap and hold.
 - Closing the viewer or the window losing focus ends a pending hold or a peek.
 - With a picture missing it takes them by drop, paste or a file pick.
+- `peek="instant"`: the other picture shows at the press itself; let go within the hold time and it stays (a flip),
+  later and the first one comes back. `hold-ms="400"` sets the hold time (250 ms by default).
+- `hold-key="Shift"`: that key does what the pointer does (a quick press flips, a held one peeks until released),
+  anywhere on the page with `keys="page"`, else while the viewer has focus. A page that routes its own keys calls
+  `press()` on the key's down and `release()` on its up instead.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/TypeFunDiabetes/tap-compare@1.2.0/tap-compare.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/TypeFunDiabetes/tap-compare@1.3.0/tap-compare.js"></script>
 <tap-compare a="first.png" b="second.png" a-label="Before" b-label="After"></tap-compare>
 ```
 
@@ -28,12 +33,14 @@ Empty, for pictures pasted or dropped in:
 
 Events (bubbling): `tc-change` `{shown, how}`, `tc-peek` `{peeking, visible}`, `tc-detail` `{x, y, w, h}`
 (fractions of the picture), `tc-pictures` `{a, b}`, `tc-mode` `{mode: "compare" | "detail"}` (from the Select
-detail / Compare images button). Methods: `flip()`, `show("a" | "b")`, `setPictures(a, b)`,
-`setDetail({x, y, w, h} | null)`; `detailBox` reads the box. Attribute `detail-box="x y w h"` (fractions) holds it: a drag
+detail / Compare images button), `tc-load` `{which}` (a picture has decoded). Methods: `flip()`, `show("a" | "b")`,
+`setPictures(a, b)`, `setDetail({x, y, w, h} | null)`, `press()`, `release()`; `detailBox` reads the box and
+`frameBox` the frame's rectangle on screen (for an overlay the page draws on the picture). Attribute `detail-box="x y w h"` (fractions) holds it: a drag
 writes it, and a page sets it to restore a saved box.
 Attribute `shown="a" | "b"` sets the picture at rest; `mode="compare" | "detail"` the mode of a `detail` viewer.
 
 Look, through CSS custom properties on the element or a parent: `--tc-accent`, `--tc-dot`, `--tc-dot-off`,
-`--tc-radius`, `--tc-blend` (the fade's duration), `--tc-max-height`, `--tc-gap`, `--tc-muted`, `--tc-font`.
+`--tc-radius`, `--tc-blend` (the fade's duration), `--tc-ease` (its timing function), `--tc-max-height`, `--tc-gap`,
+`--tc-muted`, `--tc-font`; and the parts `frame`, `dots`, `dot` (`dot-a`, `dot-b`), `controls`, `crops`, `drop`.
 
-Always load a pinned version (`@1.2.0`), never a branch: a tag here is never moved.
+Always load a pinned version (`@1.3.0`), never a branch: a tag here is never moved.
